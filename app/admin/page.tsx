@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -7,7 +6,6 @@ import {
   AlertCircle,
   CheckCircle2,
   Clock3,
-  Download,
   FileSpreadsheet,
   FileText,
   Loader2,
@@ -95,6 +93,39 @@ function formatDate(value: string | null | undefined) {
   });
 }
 
+/**
+ * Converts a timestamp into a calendar date in Qatar's timezone.
+ * The result is YYYY-MM-DD, suitable for comparing with date inputs.
+ */
+function getQatarDate(value: string | null | undefined) {
+  if (!value) return "";
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) return "";
+
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Qatar",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+  const day = parts.find((part) => part.type === "day")?.value;
+
+  return year && month && day ? `${year}-${month}-${day}` : "";
+}
+
+/**
+ * Calculates today's date in Qatar.
+ * This avoids relying on the browser or server's local timezone.
+ */
+function getQatarToday() {
+  return getQatarDate(new Date().toISOString());
+}
+
 function getCompany(ticket: TicketRow) {
   return ticket.company?.name ?? "—";
 }
@@ -112,9 +143,18 @@ function getIssue(ticket: TicketRow) {
 }
 
 function reportDateStamp() {
-  return new Date().toLocaleDateString("en-CA", {
+  const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Qatar",
-  });
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+  const day = parts.find((part) => part.type === "day")?.value;
+
+  return year && month && day ? `${year}-${month}-${day}` : "report";
 }
 
 export default function AdminDashboard() {
@@ -128,6 +168,11 @@ export default function AdminDashboard() {
   const [reportMessage, setReportMessage] = useState("");
 
   const [search, setSearch] = useState("");
+
+  // Default to today's date in Qatar whenever the dashboard is initialized.
+  const [startDate, setStartDate] = useState(getQatarToday);
+  const [endDate, setEndDate] = useState(getQatarToday);
+
   const [statusFilter, setStatusFilter] = useState("all");
   const [priorityFilter, setPriorityFilter] = useState("all");
 
@@ -274,9 +319,9 @@ export default function AdminDashboard() {
     router.replace("/login");
   }
 
-  /*
-   * Reports deliberately fetch ALL tickets again from Supabase.
-   * They do not use the dashboard's search or filters.
+  /**
+   * Reports intentionally fetch all tickets from Supabase.
+   * They are not affected by the date, status, priority, or search filters.
    */
   async function fetchAllReportData() {
     const {
@@ -386,7 +431,10 @@ export default function AdminDashboard() {
         "Urgent Priority",
         reportTickets.filter((t) => t.priority === "urgent").length,
       ],
-      ["High Priority", reportTickets.filter((t) => t.priority === "high").length],
+      [
+        "High Priority",
+        reportTickets.filter((t) => t.priority === "high").length,
+      ],
       ["Completion Rejections", rejected.length],
     ];
   }
@@ -438,7 +486,6 @@ export default function AdminDashboard() {
       const XLSX = await import("xlsx");
       const workbook = XLSX.utils.book_new();
 
-      // Worksheet 1: Summary.
       const summarySheet = XLSX.utils.aoa_to_sheet([
         ["IT SUPPORT MANAGEMENT REPORT"],
         ["All tickets — not affected by dashboard filters"],
@@ -448,10 +495,8 @@ export default function AdminDashboard() {
       ]);
 
       summarySheet["!cols"] = [{ wch: 28 }, { wch: 35 }];
-
       XLSX.utils.book_append_sheet(workbook, summarySheet, "Summary");
 
-      // Worksheet 2: Every ticket.
       const ticketRows = getTicketReportRows(reportTickets);
       const ticketsSheet = XLSX.utils.json_to_sheet(ticketRows);
 
@@ -475,7 +520,6 @@ export default function AdminDashboard() {
 
       XLSX.utils.book_append_sheet(workbook, ticketsSheet, "All Tickets");
 
-      // Worksheet 3: Rejected completions only.
       const rejectionRows = getRejectionRows(reportTickets);
 
       const rejectionSheet = XLSX.utils.json_to_sheet(
@@ -502,10 +546,7 @@ export default function AdminDashboard() {
         "Completion Rejections"
       );
 
-      XLSX.writeFile(
-        workbook,
-        `IT-Support-Report-${reportDateStamp()}.xlsx`
-      );
+      XLSX.writeFile(workbook, `IT-Support-Report-${reportDateStamp()}.xlsx`);
 
       setReportMessage(
         `Excel report generated successfully with ${reportTickets.length} tickets and ${rejectionRows.length} completion rejections.`
@@ -556,12 +597,10 @@ export default function AdminDashboard() {
         { align: "right" }
       );
 
-      const summaryRows = buildSummaryRows(reportTickets);
-
       autoTable(doc, {
         startY: 30,
         head: [["Metric", "Value"]],
-        body: summaryRows,
+        body: buildSummaryRows(reportTickets),
         theme: "grid",
         margin: { left: 14, right: 14 },
         tableWidth: 100,
@@ -641,12 +680,10 @@ export default function AdminDashboard() {
           }
         },
         didDrawPage(data) {
-          const pageCount = doc.getNumberOfPages();
-
           doc.setFontSize(8);
           doc.setFont("helvetica", "normal");
           doc.text(
-            `IT Support Report | Page ${data.pageNumber} of ${pageCount}`,
+            `IT Support Report | Page ${data.pageNumber} of ${doc.getNumberOfPages()}`,
             pageWidth / 2,
             doc.internal.pageSize.getHeight() - 7,
             { align: "center" }
@@ -654,7 +691,6 @@ export default function AdminDashboard() {
         },
       });
 
-      // Dedicated section for the latest unresolved completion feedback.
       doc.addPage("a4", "landscape");
 
       doc.setFont("helvetica", "bold");
@@ -671,6 +707,30 @@ export default function AdminDashboard() {
 
       const rejectionRows = getRejectionRows(reportTickets);
 
+      const rejectionBody = rejectionRows.length
+        ? rejectionRows.map((row) => [
+            row["Ticket Number"],
+            row.Employee,
+            row.Company,
+            row.Department,
+            row.Issue,
+            row.Priority,
+            row["Current Ticket Status"],
+            row["Employee Feedback"] || "No message provided",
+            row["Ticket Created"],
+          ])
+        : [[
+            "—",
+            "—",
+            "—",
+            "—",
+            "—",
+            "—",
+            "—",
+            "No completion rejections found.",
+            "—",
+          ]];
+
       autoTable(doc, {
         startY: 30,
         head: [[
@@ -684,20 +744,7 @@ export default function AdminDashboard() {
           "Employee Feedback",
           "Created",
         ]],
-        body: rejectionRows.map((row) => [
-          row["Ticket Number"],
-          row.Employee,
-          row.Company,
-          row.Department,
-          row.Issue,
-          row.Priority,
-          row["Current Ticket Status"],
-          row["Employee Feedback"] || "No message provided",
-          row["Ticket Created"],
-        ]),
-        ...(rejectionRows.length === 0
-          ? { body: [["—", "—", "—", "—", "—", "—", "—", "No completion rejections found.", "—"]] }
-          : {}),
+        body: rejectionBody,
         theme: "grid",
         margin: { left: 10, right: 10, bottom: 14 },
         styles: {
@@ -772,12 +819,38 @@ export default function AdminDashboard() {
       const matchesStatus =
         statusFilter === "all" || ticket.status === statusFilter;
 
+      const ticketDate = getQatarDate(ticket.created_at);
+
+      const matchesStartDate =
+        !startDate || (ticketDate !== "" && ticketDate >= startDate);
+
+      const matchesEndDate =
+        !endDate || (ticketDate !== "" && ticketDate <= endDate);
+
+      const matchesDateRange = matchesStartDate && matchesEndDate;
+
       const matchesPriority =
         priorityFilter === "all" || ticket.priority === priorityFilter;
 
-      return matchesSearch && matchesStatus && matchesPriority;
+      return (
+        matchesSearch &&
+        matchesStatus &&
+        matchesPriority &&
+        matchesDateRange
+      );
     });
-  }, [tickets, search, statusFilter, priorityFilter]);
+  }, [tickets, search, statusFilter, priorityFilter, startDate, endDate]);
+
+  function resetDateRangeToToday() {
+    const today = getQatarToday();
+    setStartDate(today);
+    setEndDate(today);
+  }
+
+  function clearDateRange() {
+    setStartDate("");
+    setEndDate("");
+  }
 
   return (
     <main className="min-h-screen bg-[#f5f7fa]">
@@ -912,9 +985,12 @@ export default function AdminDashboard() {
                   {filteredTickets.length} ticket
                   {filteredTickets.length !== 1 ? "s" : ""} shown
                 </p>
+                <p className="mt-1 text-xs text-gray-400">
+                  Dates are interpreted using Qatar local time.
+                </p>
               </div>
 
-              <div className="flex flex-col gap-3 md:flex-row">
+              <div className="flex flex-col gap-3 md:flex-row md:flex-wrap">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                   <input
@@ -924,6 +1000,58 @@ export default function AdminDashboard() {
                     className="h-10 w-full rounded-xl border border-gray-200 bg-white pl-9 pr-4 text-sm outline-none transition focus:border-gray-900 md:w-72"
                   />
                 </div>
+
+                <div className="flex flex-col gap-1">
+                  <label
+                    htmlFor="start-date"
+                    className="text-xs font-medium text-gray-500"
+                  >
+                    From
+                  </label>
+                  <input
+                    id="start-date"
+                    type="date"
+                    value={startDate}
+                    max={endDate || undefined}
+                    onChange={(event) => setStartDate(event.target.value)}
+                    className="h-10 rounded-xl border border-gray-200 bg-white px-3 text-sm outline-none focus:border-gray-900"
+                    aria-label="Filter tickets from date"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label
+                    htmlFor="end-date"
+                    className="text-xs font-medium text-gray-500"
+                  >
+                    To
+                  </label>
+                  <input
+                    id="end-date"
+                    type="date"
+                    value={endDate}
+                    min={startDate || undefined}
+                    onChange={(event) => setEndDate(event.target.value)}
+                    className="h-10 rounded-xl border border-gray-200 bg-white px-3 text-sm outline-none focus:border-gray-900"
+                    aria-label="Filter tickets to date"
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={resetDateRangeToToday}
+                  className="h-10 rounded-xl border border-gray-200 bg-white px-3 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
+                >
+                  Today
+                </button>
+
+                <button
+                  type="button"
+                  onClick={clearDateRange}
+                  className="h-10 rounded-xl border border-gray-200 bg-white px-3 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
+                >
+                  All Dates
+                </button>
 
                 <select
                   value={statusFilter}
@@ -970,7 +1098,7 @@ export default function AdminDashboard() {
                 No tickets found
               </h3>
               <p className="mt-1 text-sm text-gray-500">
-                Try changing your search or filters.
+                Try changing your search or filters, or select another date.
               </p>
             </div>
           ) : (
