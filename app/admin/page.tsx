@@ -94,8 +94,8 @@ function formatDate(value: string | null | undefined) {
 }
 
 /**
- * Converts a timestamp into a calendar date in Qatar's timezone.
- * The result is YYYY-MM-DD, suitable for comparing with date inputs.
+ * Converts a timestamp into a date using Qatar's timezone.
+ * Returns YYYY-MM-DD for safe comparison with date inputs.
  */
 function getQatarDate(value: string | null | undefined) {
   if (!value) return "";
@@ -119,8 +119,8 @@ function getQatarDate(value: string | null | undefined) {
 }
 
 /**
- * Calculates today's date in Qatar.
- * This avoids relying on the browser or server's local timezone.
+ * Call this from useEffect or an event handler only.
+ * Do not call during component rendering or state initialization.
  */
 function getQatarToday() {
   return getQatarDate(new Date().toISOString());
@@ -143,18 +143,7 @@ function getIssue(ticket: TicketRow) {
 }
 
 function reportDateStamp() {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Qatar",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(new Date());
-
-  const year = parts.find((part) => part.type === "year")?.value;
-  const month = parts.find((part) => part.type === "month")?.value;
-  const day = parts.find((part) => part.type === "day")?.value;
-
-  return year && month && day ? `${year}-${month}-${day}` : "report";
+  return getQatarToday() || "report";
 }
 
 export default function AdminDashboard() {
@@ -169,12 +158,26 @@ export default function AdminDashboard() {
 
   const [search, setSearch] = useState("");
 
-  // Default to today's date in Qatar whenever the dashboard is initialized.
-  const [startDate, setStartDate] = useState(getQatarToday);
-  const [endDate, setEndDate] = useState(getQatarToday);
+  // Empty initial values avoid reading the current date during prerendering.
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [dateInitialized, setDateInitialized] = useState(false);
 
   const [statusFilter, setStatusFilter] = useState("all");
   const [priorityFilter, setPriorityFilter] = useState("all");
+
+  /*
+   * Initialize the dashboard to today's date in Qatar after the page
+   * mounts in the browser. This prevents the Next.js current-time
+   * prerender error.
+   */
+  useEffect(() => {
+    const today = getQatarToday();
+
+    setStartDate(today);
+    setEndDate(today);
+    setDateInitialized(true);
+  }, []);
 
   const loadTickets = useCallback(
     async (showRefresh = false) => {
@@ -320,8 +323,7 @@ export default function AdminDashboard() {
   }
 
   /**
-   * Reports intentionally fetch all tickets from Supabase.
-   * They are not affected by the date, status, priority, or search filters.
+   * Reports fetch all tickets independently of the dashboard's filters.
    */
   async function fetchAllReportData() {
     const {
@@ -521,7 +523,6 @@ export default function AdminDashboard() {
       XLSX.utils.book_append_sheet(workbook, ticketsSheet, "All Tickets");
 
       const rejectionRows = getRejectionRows(reportTickets);
-
       const rejectionSheet = XLSX.utils.json_to_sheet(
         rejectionRows.length
           ? rejectionRows
@@ -546,7 +547,10 @@ export default function AdminDashboard() {
         "Completion Rejections"
       );
 
-      XLSX.writeFile(workbook, `IT-Support-Report-${reportDateStamp()}.xlsx`);
+      XLSX.writeFile(
+        workbook,
+        `IT-Support-Report-${reportDateStamp()}.xlsx`
+      );
 
       setReportMessage(
         `Excel report generated successfully with ${reportTickets.length} tickets and ${rejectionRows.length} completion rejections.`
@@ -805,6 +809,9 @@ export default function AdminDashboard() {
   );
 
   const filteredTickets = useMemo(() => {
+    // Do not show the ticket list until the browser has initialized today's date.
+    if (!dateInitialized) return [];
+
     const searchValue = search.toLowerCase().trim();
 
     return tickets.filter((ticket) => {
@@ -827,8 +834,6 @@ export default function AdminDashboard() {
       const matchesEndDate =
         !endDate || (ticketDate !== "" && ticketDate <= endDate);
 
-      const matchesDateRange = matchesStartDate && matchesEndDate;
-
       const matchesPriority =
         priorityFilter === "all" || ticket.priority === priorityFilter;
 
@@ -836,10 +841,19 @@ export default function AdminDashboard() {
         matchesSearch &&
         matchesStatus &&
         matchesPriority &&
-        matchesDateRange
+        matchesStartDate &&
+        matchesEndDate
       );
     });
-  }, [tickets, search, statusFilter, priorityFilter, startDate, endDate]);
+  }, [
+    tickets,
+    search,
+    statusFilter,
+    priorityFilter,
+    startDate,
+    endDate,
+    dateInitialized,
+  ]);
 
   function resetDateRangeToToday() {
     const today = getQatarToday();
@@ -986,7 +1000,7 @@ export default function AdminDashboard() {
                   {filteredTickets.length !== 1 ? "s" : ""} shown
                 </p>
                 <p className="mt-1 text-xs text-gray-400">
-                  Dates are interpreted using Qatar local time.
+                  Dates use Qatar local time.
                 </p>
               </div>
 
@@ -1082,7 +1096,7 @@ export default function AdminDashboard() {
             </div>
           </div>
 
-          {loading ? (
+          {loading || !dateInitialized ? (
             <div className="flex min-h-72 items-center justify-center">
               <div className="flex items-center gap-3 text-gray-500">
                 <Loader2 className="h-5 w-5 animate-spin" />
@@ -1098,7 +1112,7 @@ export default function AdminDashboard() {
                 No tickets found
               </h3>
               <p className="mt-1 text-sm text-gray-500">
-                Try changing your search or filters, or select another date.
+                Try changing your search or filters, or choose another date.
               </p>
             </div>
           ) : (
