@@ -13,6 +13,11 @@ import {
 
 import { supabase } from "@/lib/supabase";
 
+type UserProfile = {
+  role: "admin" | "employee";
+  must_change_password: boolean;
+};
+
 export default function LoginPage() {
   const router = useRouter();
 
@@ -21,9 +26,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  async function handleLogin(
-    event: FormEvent<HTMLFormElement>
-  ) {
+  async function handleLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     setError("");
@@ -37,39 +40,43 @@ export default function LoginPage() {
         });
 
       if (loginError) {
-        setError(loginError.message);
+        setError("Invalid email or password. Please try again.");
         return;
       }
 
       if (!data.user) {
-        setError("Could not sign in.");
+        setError("Could not sign in. Please try again.");
         return;
       }
 
-      // Retrieve the user's role.
-      const { data: profile, error: profileError } =
-        await supabase
-          .from("profiles")
-          .select("role")
-          .eq("id", data.user.id)
-          .single();
+      // Retrieve the employee's role and temporary-password status.
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("role, must_change_password")
+        .eq("id", data.user.id)
+        .single();
 
       if (profileError || !profile) {
-        console.error(profileError);
+        console.error("Profile lookup failed:", profileError);
 
         await supabase.auth.signOut();
 
         setError(
-          "Your account profile has not been configured yet."
+          "Your account profile has not been configured. Please contact IT."
         );
         return;
       }
 
-      // Redirect according to the user's role.
-      if (profile.role === "admin") {
-        router.push("/admin");
+      const userProfile = profile as UserProfile;
+
+      // Only administrators can access the admin dashboard.
+      if (userProfile.role === "admin") {
+        router.replace("/admin");
+      } else if (userProfile.must_change_password) {
+        // Employees must replace their temporary password first.
+        router.replace("/change-password");
       } else {
-        router.push("/employee");
+        router.replace("/employee");
       }
 
       router.refresh();
@@ -84,7 +91,6 @@ export default function LoginPage() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-[#f5f7fa] px-6 py-10">
       <div className="w-full max-w-md">
-
         {/* Company Logo */}
         <div className="mb-8 text-center">
           <div className="mx-auto mb-5 flex min-h-32 w-full max-w-xs items-center justify-center rounded-2xl border border-gray-200 bg-white px-8 py-5 shadow-sm">
@@ -139,10 +145,7 @@ export default function LoginPage() {
             </div>
           )}
 
-          <form
-            onSubmit={handleLogin}
-            className="mt-6 space-y-5"
-          >
+          <form onSubmit={handleLogin} className="mt-6 space-y-5">
             {/* Email */}
             <div>
               <label
@@ -164,9 +167,7 @@ export default function LoginPage() {
                   type="email"
                   autoComplete="username"
                   value={email}
-                  onChange={(event) =>
-                    setEmail(event.target.value)
-                  }
+                  onChange={(event) => setEmail(event.target.value)}
                   placeholder="you@company.com"
                   required
                   disabled={loading}
@@ -196,9 +197,7 @@ export default function LoginPage() {
                   type="password"
                   autoComplete="current-password"
                   value={password}
-                  onChange={(event) =>
-                    setPassword(event.target.value)
-                  }
+                  onChange={(event) => setPassword(event.target.value)}
                   placeholder="Enter your password"
                   required
                   disabled={loading}
@@ -215,10 +214,7 @@ export default function LoginPage() {
             >
               {loading ? (
                 <>
-                  <Loader2
-                    size={18}
-                    className="animate-spin"
-                  />
+                  <Loader2 size={18} className="animate-spin" />
                   Signing in...
                 </>
               ) : (

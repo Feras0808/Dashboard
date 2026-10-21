@@ -1,7 +1,9 @@
+
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   AlertCircle,
   CheckCircle2,
@@ -13,6 +15,7 @@ import {
   RefreshCw,
   Search,
   Ticket,
+  Users,
   XCircle,
 } from "lucide-react";
 
@@ -93,10 +96,6 @@ function formatDate(value: string | null | undefined) {
   });
 }
 
-/**
- * Converts a timestamp into a date using Qatar's timezone.
- * Returns YYYY-MM-DD for safe comparison with date inputs.
- */
 function getQatarDate(value: string | null | undefined) {
   if (!value) return "";
 
@@ -118,10 +117,6 @@ function getQatarDate(value: string | null | undefined) {
   return year && month && day ? `${year}-${month}-${day}` : "";
 }
 
-/**
- * Call this from useEffect or an event handler only.
- * Do not call during component rendering or state initialization.
- */
 function getQatarToday() {
   return getQatarDate(new Date().toISOString());
 }
@@ -158,7 +153,6 @@ export default function AdminDashboard() {
 
   const [search, setSearch] = useState("");
 
-  // Empty initial values avoid reading the current date during prerendering.
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [dateInitialized, setDateInitialized] = useState(false);
@@ -166,11 +160,6 @@ export default function AdminDashboard() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [priorityFilter, setPriorityFilter] = useState("all");
 
-  /*
-   * Initialize the dashboard to today's date in Qatar after the page
-   * mounts in the browser. This prevents the Next.js current-time
-   * prerender error.
-   */
   useEffect(() => {
     const today = getQatarToday();
 
@@ -322,9 +311,6 @@ export default function AdminDashboard() {
     router.replace("/login");
   }
 
-  /**
-   * Reports fetch all tickets independently of the dashboard's filters.
-   */
   async function fetchAllReportData() {
     const {
       data: { user },
@@ -499,8 +485,9 @@ export default function AdminDashboard() {
       summarySheet["!cols"] = [{ wch: 28 }, { wch: 35 }];
       XLSX.utils.book_append_sheet(workbook, summarySheet, "Summary");
 
-      const ticketRows = getTicketReportRows(reportTickets);
-      const ticketsSheet = XLSX.utils.json_to_sheet(ticketRows);
+      const ticketsSheet = XLSX.utils.json_to_sheet(
+        getTicketReportRows(reportTickets)
+      );
 
       ticketsSheet["!cols"] = [
         { wch: 18 },
@@ -547,10 +534,7 @@ export default function AdminDashboard() {
         "Completion Rejections"
       );
 
-      XLSX.writeFile(
-        workbook,
-        `IT-Support-Report-${reportDateStamp()}.xlsx`
-      );
+      XLSX.writeFile(workbook, `IT-Support-Report-${reportDateStamp()}.xlsx`);
 
       setReportMessage(
         `Excel report generated successfully with ${reportTickets.length} tickets and ${rejectionRows.length} completion rejections.`
@@ -723,17 +707,7 @@ export default function AdminDashboard() {
             row["Employee Feedback"] || "No message provided",
             row["Ticket Created"],
           ])
-        : [[
-            "—",
-            "—",
-            "—",
-            "—",
-            "—",
-            "—",
-            "—",
-            "No completion rejections found.",
-            "—",
-          ]];
+        : [["—", "—", "—", "—", "—", "—", "—", "No completion rejections found.", "—"]];
 
       autoTable(doc, {
         startY: 30,
@@ -797,19 +771,14 @@ export default function AdminDashboard() {
     () => ({
       total: tickets.length,
       new: tickets.filter((ticket) => ticket.status === "new").length,
-      inProgress: tickets.filter(
-        (ticket) => ticket.status === "in_progress"
-      ).length,
-      completed: tickets.filter(
-        (ticket) => ticket.status === "completed"
-      ).length,
+      inProgress: tickets.filter((ticket) => ticket.status === "in_progress").length,
+      completed: tickets.filter((ticket) => ticket.status === "completed").length,
       urgent: tickets.filter((ticket) => ticket.priority === "urgent").length,
     }),
     [tickets]
   );
 
   const filteredTickets = useMemo(() => {
-    // Do not show the ticket list until the browser has initialized today's date.
     if (!dateInitialized) return [];
 
     const searchValue = search.toLowerCase().trim();
@@ -880,6 +849,15 @@ export default function AdminDashboard() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            {/* NEW: Employee Management */}
+            <Link
+              href="/admin/employees"
+              className="flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-semibold text-blue-800 shadow-sm transition hover:bg-blue-100"
+            >
+              <Users className="h-4 w-4" />
+              Manage Employees
+            </Link>
+
             <button
               onClick={() => void generatePdfReport()}
               disabled={loading || refreshing || reporting !== null}
@@ -903,9 +881,7 @@ export default function AdminDashboard() {
               ) : (
                 <FileSpreadsheet className="h-4 w-4" />
               )}
-              {reporting === "excel"
-                ? "Generating Excel..."
-                : "Generate Excel"}
+              {reporting === "excel" ? "Generating Excel..." : "Generate Excel"}
             </button>
 
             <button
@@ -961,43 +937,20 @@ export default function AdminDashboard() {
         )}
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-          <StatCard
-            title="Total Tickets"
-            value={statistics.total}
-            icon={<Ticket className="h-5 w-5" />}
-          />
-          <StatCard
-            title="New"
-            value={statistics.new}
-            icon={<AlertCircle className="h-5 w-5" />}
-          />
-          <StatCard
-            title="In Progress"
-            value={statistics.inProgress}
-            icon={<Clock3 className="h-5 w-5" />}
-          />
-          <StatCard
-            title="Completed"
-            value={statistics.completed}
-            icon={<CheckCircle2 className="h-5 w-5" />}
-          />
-          <StatCard
-            title="Urgent"
-            value={statistics.urgent}
-            icon={<AlertCircle className="h-5 w-5" />}
-          />
+          <StatCard title="Total Tickets" value={statistics.total} icon={<Ticket className="h-5 w-5" />} />
+          <StatCard title="New" value={statistics.new} icon={<AlertCircle className="h-5 w-5" />} />
+          <StatCard title="In Progress" value={statistics.inProgress} icon={<Clock3 className="h-5 w-5" />} />
+          <StatCard title="Completed" value={statistics.completed} icon={<CheckCircle2 className="h-5 w-5" />} />
+          <StatCard title="Urgent" value={statistics.urgent} icon={<AlertCircle className="h-5 w-5" />} />
         </div>
 
         <div className="mt-8 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
           <div className="border-b p-5">
             <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
               <div>
-                <h2 className="font-semibold text-gray-900">
-                  Support Tickets
-                </h2>
+                <h2 className="font-semibold text-gray-900">Support Tickets</h2>
                 <p className="mt-1 text-sm text-gray-500">
-                  {filteredTickets.length} ticket
-                  {filteredTickets.length !== 1 ? "s" : ""} shown
+                  {filteredTickets.length} ticket{filteredTickets.length !== 1 ? "s" : ""} shown
                 </p>
                 <p className="mt-1 text-xs text-gray-400">
                   Dates use Qatar local time.
@@ -1016,10 +969,7 @@ export default function AdminDashboard() {
                 </div>
 
                 <div className="flex flex-col gap-1">
-                  <label
-                    htmlFor="start-date"
-                    className="text-xs font-medium text-gray-500"
-                  >
+                  <label htmlFor="start-date" className="text-xs font-medium text-gray-500">
                     From
                   </label>
                   <input
@@ -1034,10 +984,7 @@ export default function AdminDashboard() {
                 </div>
 
                 <div className="flex flex-col gap-1">
-                  <label
-                    htmlFor="end-date"
-                    className="text-xs font-medium text-gray-500"
-                  >
+                  <label htmlFor="end-date" className="text-xs font-medium text-gray-500">
                     To
                   </label>
                   <input
@@ -1108,9 +1055,7 @@ export default function AdminDashboard() {
               <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gray-100">
                 <Ticket className="h-7 w-7 text-gray-400" />
               </div>
-              <h3 className="mt-4 font-semibold text-gray-900">
-                No tickets found
-              </h3>
+              <h3 className="mt-4 font-semibold text-gray-900">No tickets found</h3>
               <p className="mt-1 text-sm text-gray-500">
                 Try changing your search or filters, or choose another date.
               </p>
