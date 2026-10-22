@@ -60,8 +60,8 @@ export default function ChangePasswordPage() {
     event.preventDefault();
     setErrorMessage("");
 
-    if (password.length < 12) {
-      setErrorMessage("Use at least 12 characters for your new password.");
+    if (password.length < 6) {
+      setErrorMessage("Use at least 6 characters for your new password.");
       return;
     }
 
@@ -142,7 +142,7 @@ export default function ChangePasswordPage() {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                minLength={12}
+                minLength={6}
                 maxLength={72}
                 autoComplete="new-password"
                 required
@@ -156,7 +156,7 @@ export default function ChangePasswordPage() {
                 type="password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                minLength={12}
+                minLength={6}
                 maxLength={72}
                 autoComplete="new-password"
                 required
