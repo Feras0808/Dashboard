@@ -101,9 +101,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (password.length < 12 || password.length > 72) {
+    if (password.length < 6 || password.length > 72) {
       return NextResponse.json(
-        { error: "Temporary passwords must be 12–72 characters." },
+        { error: "Temporary passwords must be 6–72 characters." },
         { status: 400 }
       );
     }
