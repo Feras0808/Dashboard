@@ -330,13 +330,13 @@ export default function ManageEmployeesPage() {
                 type="password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
-                minLength={12}
+                minLength={6}
                 maxLength={72}
                 autoComplete="new-password"
                 required
               />
               <span className="mt-1 block text-xs font-normal text-gray-500">
-                Use 12–72 characters. Share the temporary password securely.
+                Use 6–72 characters. Share the temporary password securely.
               </span>
             </label>
 
