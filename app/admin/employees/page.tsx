@@ -101,9 +101,9 @@ export default function ManageEmployeesPage() {
       return;
     }
 
-    if (password.length < 12 || password.length > 72) {
+    if (password.length < 6 || password.length > 72) {
       setErrorMessage(
-        "The temporary password must be between 12 and 72 characters."
+        "The temporary password must be between 6 and 72 characters."
       );
       return;
     }
