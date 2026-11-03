@@ -697,16 +697,16 @@ export default function AdminDashboard() {
 
       const rejectionBody = rejectionRows.length
         ? rejectionRows.map((row) => [
-            row["Ticket Number"],
-            row.Employee,
-            row.Company,
-            row.Department,
-            row.Issue,
-            row.Priority,
-            row["Current Ticket Status"],
-            row["Employee Feedback"] || "No message provided",
-            row["Ticket Created"],
-          ])
+          row["Ticket Number"],
+          row.Employee,
+          row.Company,
+          row.Department,
+          row.Issue,
+          row.Priority,
+          row["Current Ticket Status"],
+          row["Employee Feedback"] || "No message provided",
+          row["Ticket Created"],
+        ])
         : [["—", "—", "—", "—", "—", "—", "—", "No completion rejections found.", "—"]];
 
       autoTable(doc, {
@@ -1081,9 +1081,8 @@ export default function AdminDashboard() {
                     <tr
                       key={ticket.id}
                       onClick={() => router.push(`/admin/tickets/${ticket.id}`)}
-                      className={`cursor-pointer transition hover:bg-gray-50 ${
-                        ticket.completion_rejected ? "bg-red-50/40" : ""
-                      }`}
+                      className={`cursor-pointer transition hover:bg-gray-50 ${ticket.completion_rejected ? "bg-red-50/40" : ""
+                        }`}
                     >
                       <td className="px-5 py-4">
                         <span className="font-semibold text-gray-900">
@@ -1113,10 +1112,9 @@ export default function AdminDashboard() {
 
                       <td className="px-5 py-4">
                         <span
-                          className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold capitalize ${
-                            priorityStyles[ticket.priority] ??
+                          className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold capitalize ${priorityStyles[ticket.priority] ??
                             "border-gray-200 bg-gray-50 text-gray-700"
-                          }`}
+                            }`}
                         >
                           {formatLabel(ticket.priority)}
                         </span>
@@ -1125,10 +1123,9 @@ export default function AdminDashboard() {
                       <td className="px-5 py-4">
                         <div className="flex flex-col items-start gap-2">
                           <span
-                            className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${
-                              statusStyles[ticket.status] ??
+                            className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${statusStyles[ticket.status] ??
                               "border-gray-200 bg-gray-50 text-gray-700"
-                            }`}
+                              }`}
                           >
                             {formatLabel(ticket.status)}
                           </span>

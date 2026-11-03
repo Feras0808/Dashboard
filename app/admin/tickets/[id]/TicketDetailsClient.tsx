@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import TicketConversation from "@/components/ticket-conversation";
 import {
   AlertCircle,
   ArrowLeft,
@@ -80,6 +81,7 @@ const statusStyles: Record<string, string> = {
   new: "bg-blue-50 text-blue-700 border-blue-200",
   in_progress: "bg-orange-50 text-orange-700 border-orange-200",
   completed: "bg-green-50 text-green-700 border-green-200",
+  closed: "bg-gray-900 text-white border-gray-900",
   cancelled: "bg-gray-100 text-gray-600 border-gray-200",
 };
 
@@ -161,29 +163,29 @@ function normalizeAttachments(value: unknown): Attachment[] {
     .map((item) => {
       const path = String(
         item.path ??
-          item.filePath ??
-          item.storage_path ??
-          item.fullPath ??
-          item.file_path ??
-          ""
+        item.filePath ??
+        item.storage_path ??
+        item.fullPath ??
+        item.file_path ??
+        ""
       );
 
       const url = String(
         item.url ??
-          item.publicUrl ??
-          item.public_url ??
-          item.downloadURL ??
-          item.downloadUrl ??
-          ""
+        item.publicUrl ??
+        item.public_url ??
+        item.downloadURL ??
+        item.downloadUrl ??
+        ""
       );
 
       const name = String(
         item.name ??
-          item.fileName ??
-          item.filename ??
-          item.originalName ??
-          (path ? path.split("/").pop() : "") ??
-          "Attachment"
+        item.fileName ??
+        item.filename ??
+        item.originalName ??
+        (path ? path.split("/").pop() : "") ??
+        "Attachment"
       );
 
       return {
@@ -192,10 +194,10 @@ function normalizeAttachments(value: unknown): Attachment[] {
         url,
         type: String(
           item.type ??
-            item.mimeType ??
-            item.mimetype ??
-            item.contentType ??
-            ""
+          item.mimeType ??
+          item.mimetype ??
+          item.contentType ??
+          ""
         ),
         size: Number(item.size ?? item.fileSize ?? 0) || 0,
       };
@@ -355,6 +357,13 @@ export default function TicketDetailsClient({
 
   async function saveChanges() {
     if (!ticket) return;
+
+    // Closed is a permanent, terminal state. It cannot be reopened.
+    if (ticket.status === "closed") {
+      setStatus("closed");
+      setPageError("This ticket is permanently closed and cannot be reopened or edited.");
+      return;
+    }
 
     setSaving(true);
     setPageError("");
@@ -563,19 +572,17 @@ export default function TicketDetailsClient({
               </h2>
 
               <span
-                className={`rounded-full border px-3 py-1 text-xs font-semibold ${
-                  priorityStyles[ticket.priority] ||
+                className={`rounded-full border px-3 py-1 text-xs font-semibold ${priorityStyles[ticket.priority] ||
                   "border-gray-200 bg-gray-100 text-gray-600"
-                }`}
+                  }`}
               >
                 {formatLabel(ticket.priority)}
               </span>
 
               <span
-                className={`rounded-full border px-3 py-1 text-xs font-semibold ${
-                  statusStyles[ticket.status] ||
+                className={`rounded-full border px-3 py-1 text-xs font-semibold ${statusStyles[ticket.status] ||
                   "border-gray-200 bg-gray-100 text-gray-600"
-                }`}
+                  }`}
               >
                 {formatLabel(ticket.status)}
               </span>
@@ -803,19 +810,17 @@ export default function TicketDetailsClient({
 
             {/* EMPLOYEE RESOLUTION FEEDBACK */}
             <div
-              className={`rounded-2xl border p-6 shadow-sm ${
-                completionRejected
-                  ? "border-red-200 bg-red-50/50"
-                  : "border-gray-200 bg-white"
-              }`}
+              className={`rounded-2xl border p-6 shadow-sm ${completionRejected
+                ? "border-red-200 bg-red-50/50"
+                : "border-gray-200 bg-white"
+                }`}
             >
               <div className="flex items-start gap-3">
                 <div
-                  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
-                    completionRejected
-                      ? "bg-red-100 text-red-700"
-                      : "bg-gray-100 text-gray-700"
-                  }`}
+                  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${completionRejected
+                    ? "bg-red-100 text-red-700"
+                    : "bg-gray-100 text-gray-700"
+                    }`}
                 >
                   {completionRejected ? (
                     <XCircle className="h-5 w-5" />
@@ -861,19 +866,17 @@ export default function TicketDetailsClient({
                     return (
                       <article
                         key={item.id}
-                        className={`rounded-xl border p-5 ${
-                          rejected
-                            ? "border-red-200 bg-white"
-                            : "border-green-200 bg-white"
-                        }`}
+                        className={`rounded-xl border p-5 ${rejected
+                          ? "border-red-200 bg-white"
+                          : "border-green-200 bg-white"
+                          }`}
                       >
                         <div className="flex flex-wrap items-center justify-between gap-3">
                           <span
-                            className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-bold ${
-                              rejected
-                                ? "border-red-200 bg-red-50 text-red-800"
-                                : "border-green-200 bg-green-50 text-green-800"
-                            }`}
+                            className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-bold ${rejected
+                              ? "border-red-200 bg-red-50 text-red-800"
+                              : "border-green-200 bg-green-50 text-green-800"
+                              }`}
                           >
                             {rejected ? (
                               <XCircle className="h-4 w-4" />
@@ -982,6 +985,12 @@ export default function TicketDetailsClient({
               )}
             </div>
 
+            {/* TWO-WAY TICKET CONVERSATION */}
+            <TicketConversation
+              ticketId={ticket.id}
+              ticketStatus={ticket.status}
+            />
+
             {/* ADMIN RESPONSE */}
             <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
               <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
@@ -991,6 +1000,7 @@ export default function TicketDetailsClient({
               <textarea
                 value={adminResponse}
                 onChange={(event) => setAdminResponse(event.target.value)}
+                disabled={ticket.status === "closed"}
                 rows={8}
                 placeholder="Write what you did to resolve the issue, or add an update..."
                 className="mt-4 w-full resize-none rounded-xl border border-gray-300 px-4 py-3 text-sm leading-6 outline-none transition focus:border-gray-900 focus:ring-1 focus:ring-gray-900"
@@ -1014,14 +1024,34 @@ export default function TicketDetailsClient({
                   id="ticket-status"
                   value={status}
                   onChange={(event) => setStatus(event.target.value)}
-                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm outline-none focus:border-gray-900"
+                  disabled={ticket.status === "closed"}
+                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm outline-none focus:border-gray-900 disabled:cursor-not-allowed disabled:bg-gray-100"
                 >
                   <option value="new">New</option>
                   <option value="in_progress">In Progress</option>
                   <option value="completed">Completed</option>
+                  <option value="closed">Closed (permanent)</option>
                   <option value="cancelled">Cancelled</option>
                 </select>
               </div>
+
+              {ticket.status === "closed" && (
+                <div className="mt-4 rounded-xl border border-gray-300 bg-gray-100 p-3">
+                  <p className="text-sm font-semibold text-gray-900">Ticket permanently closed</p>
+                  <p className="mt-1 text-xs leading-5 text-gray-600">
+                    Employees cannot send further messages or reopen this ticket. This status cannot be changed.
+                  </p>
+                </div>
+              )}
+
+              {status === "closed" && ticket.status !== "closed" && (
+                <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3">
+                  <p className="text-sm font-semibold text-amber-900">You are closing this ticket</p>
+                  <p className="mt-1 text-xs leading-5 text-amber-800">
+                    After saving, the employee will no longer be able to send messages or reopen it.
+                  </p>
+                </div>
+              )}
 
               {completionRejected && (
                 <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3">
@@ -1047,7 +1077,8 @@ export default function TicketDetailsClient({
                   id="ticket-priority"
                   value={priority}
                   onChange={(event) => setPriority(event.target.value)}
-                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm outline-none focus:border-gray-900"
+                  disabled={ticket.status === "closed"}
+                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm outline-none focus:border-gray-900 disabled:cursor-not-allowed disabled:bg-gray-100"
                 >
                   <option value="urgent">Urgent</option>
                   <option value="high">High</option>
@@ -1058,7 +1089,7 @@ export default function TicketDetailsClient({
 
               <button
                 onClick={saveChanges}
-                disabled={saving}
+                disabled={saving || ticket.status === "closed"}
                 className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-gray-950 px-5 py-3.5 text-sm font-semibold text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {saving ? (
@@ -1066,6 +1097,8 @@ export default function TicketDetailsClient({
                     <Loader2 className="h-4 w-4 animate-spin" />
                     Saving...
                   </>
+                ) : ticket.status === "closed" ? (
+                  "Ticket Closed"
                 ) : (
                   <>
                     <Save className="h-4 w-4" />
@@ -1106,6 +1139,14 @@ export default function TicketDetailsClient({
                     icon={<XCircle className="h-4 w-4 text-red-600" />}
                     title="Employee Rejected Completion"
                     date={latestFeedback.created_at}
+                  />
+                )}
+
+                {ticket.status === "closed" && (
+                  <TimelineItem
+                    icon={<XCircle className="h-4 w-4" />}
+                    title="Ticket Closed"
+                    date={ticket.updated_at}
                   />
                 )}
 

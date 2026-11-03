@@ -17,6 +17,7 @@ import {
 
 import { supabase } from "@/lib/supabase";
 import EmployeeResolutionFeedback from "@/components/employee-resolution-feedback";
+import TicketConversation from "@/components/ticket-conversation";
 
 type RelatedName = { name: string } | { name: string }[] | null;
 
@@ -60,6 +61,7 @@ const statusStyles: Record<string, string> = {
   new: "border-blue-200 bg-blue-50 text-blue-700",
   in_progress: "border-orange-200 bg-orange-50 text-orange-700",
   completed: "border-green-200 bg-green-50 text-green-700",
+  closed: "border-gray-300 bg-gray-200 text-gray-700",
   cancelled: "border-gray-200 bg-gray-100 text-gray-600",
 };
 
@@ -122,6 +124,7 @@ function InfoCard({
 
 function ProgressTimeline({ ticket }: { ticket: EmployeeTicket }) {
   const cancelled = ticket.status === "cancelled";
+  const closed = ticket.status === "closed";
 
   const steps = [
     {
@@ -137,14 +140,15 @@ function ProgressTimeline({ ticket }: { ticket: EmployeeTicket }) {
       date: ticket.started_at,
       complete:
         ticket.status === "in_progress" ||
-        ticket.status === "completed",
+        ticket.status === "completed" ||
+        closed,
       current: ticket.status === "in_progress",
     },
     {
       title: "Completed",
       description: "Your request has been marked as completed.",
       date: ticket.completed_at,
-      complete: ticket.status === "completed",
+      complete: ticket.status === "completed" || closed,
       current: ticket.status === "completed",
     },
   ];
@@ -164,16 +168,24 @@ function ProgressTimeline({ ticket }: { ticket: EmployeeTicket }) {
         </div>
       </div>
 
-      {cancelled ? (
+      {cancelled || closed ? (
         <div className="mt-6 flex gap-3 rounded-xl border border-gray-200 bg-gray-50 p-4">
-          <XCircle className="mt-0.5 h-5 w-5 shrink-0 text-gray-500" />
+          {cancelled ? (
+            <XCircle className="mt-0.5 h-5 w-5 shrink-0 text-gray-500" />
+          ) : (
+            <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-green-600" />
+          )}
+
           <div>
             <p className="font-semibold text-gray-800">
-              This ticket has been cancelled
+              {cancelled
+                ? "This ticket has been cancelled"
+                : "This ticket has been closed"}
             </p>
             <p className="mt-1 text-sm leading-6 text-gray-600">
-              Contact the IT team if you need clarification or wish to
-              submit a new request.
+              {cancelled
+                ? "Contact the IT team if you need clarification or wish to submit a new request."
+                : "This ticket is now closed. You can still view the conversation and ticket history."}
             </p>
           </div>
         </div>
@@ -186,18 +198,16 @@ function ProgressTimeline({ ticket }: { ticket: EmployeeTicket }) {
             >
               {index !== steps.length - 1 && (
                 <div
-                  className={`absolute left-[10px] top-6 h-full w-px ${
-                    step.complete ? "bg-green-300" : "bg-gray-200"
-                  }`}
+                  className={`absolute left-[10px] top-6 h-full w-px ${step.complete ? "bg-green-300" : "bg-gray-200"
+                    }`}
                 />
               )}
 
               <div
-                className={`relative z-[1] flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full border ${
-                  step.complete
+                className={`relative z-[1] flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full border ${step.complete
                     ? "border-green-200 bg-green-50 text-green-600"
                     : "border-gray-300 bg-white text-gray-400"
-                }`}
+                  }`}
               >
                 {step.complete ? (
                   <CheckCircle2 className="h-4 w-4" />
@@ -209,9 +219,8 @@ function ProgressTimeline({ ticket }: { ticket: EmployeeTicket }) {
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <h3
-                    className={`text-sm font-semibold ${
-                      step.complete ? "text-gray-900" : "text-gray-400"
-                    }`}
+                    className={`text-sm font-semibold ${step.complete ? "text-gray-900" : "text-gray-400"
+                      }`}
                   >
                     {step.title}
                   </h3>
@@ -224,9 +233,8 @@ function ProgressTimeline({ ticket }: { ticket: EmployeeTicket }) {
                 </div>
 
                 <p
-                  className={`mt-1 text-sm leading-6 ${
-                    step.complete ? "text-gray-600" : "text-gray-400"
-                  }`}
+                  className={`mt-1 text-sm leading-6 ${step.complete ? "text-gray-600" : "text-gray-400"
+                    }`}
                 >
                   {step.description}
                 </p>
@@ -245,10 +253,6 @@ function ProgressTimeline({ ticket }: { ticket: EmployeeTicket }) {
   );
 }
 
-/**
- * This component uses useParams(), so it must be rendered
- * underneath the Suspense boundary in the default export below.
- */
 function EmployeeTicketDetailsContent() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -415,10 +419,9 @@ function EmployeeTicketDetailsContent() {
               </h2>
 
               <span
-                className={`rounded-full border px-3 py-1 text-xs font-semibold ${
-                  statusStyles[ticket.status] ??
+                className={`rounded-full border px-3 py-1 text-xs font-semibold ${statusStyles[ticket.status] ??
                   "border-gray-200 bg-gray-100 text-gray-600"
-                }`}
+                  }`}
               >
                 {formatLabel(ticket.status)}
               </span>
@@ -430,9 +433,8 @@ function EmployeeTicketDetailsContent() {
           </div>
 
           <div
-            className={`text-sm font-semibold ${
-              priorityStyles[ticket.priority] ?? "text-gray-600"
-            }`}
+            className={`text-sm font-semibold ${priorityStyles[ticket.priority] ?? "text-gray-600"
+              }`}
           >
             {formatLabel(ticket.priority)} Priority
           </div>
@@ -562,6 +564,12 @@ function EmployeeTicketDetailsContent() {
                 </div>
               )}
             </section>
+
+            {/* Two-way conversation between employee and IT */}
+            <TicketConversation
+              ticketId={ticket.id}
+              ticketStatus={ticket.status}
+            />
 
             {/* Employee completion confirmation or rejection */}
             <EmployeeResolutionFeedback

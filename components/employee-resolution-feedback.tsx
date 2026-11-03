@@ -236,11 +236,10 @@ export default function EmployeeResolutionFeedback({
             setError("");
             setSuccess("");
           }}
-          className={`flex items-start gap-3 rounded-xl border p-4 text-left transition ${
-            decision === "confirmed_solved"
+          className={`flex items-start gap-3 rounded-xl border p-4 text-left transition ${decision === "confirmed_solved"
               ? "border-green-500 bg-green-50 ring-1 ring-green-500"
               : "border-gray-200 hover:border-green-300 hover:bg-green-50/50"
-          }`}
+            }`}
         >
           <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-green-600" />
           <span>
@@ -260,11 +259,10 @@ export default function EmployeeResolutionFeedback({
             setError("");
             setSuccess("");
           }}
-          className={`flex items-start gap-3 rounded-xl border p-4 text-left transition ${
-            decision === "still_not_solved"
+          className={`flex items-start gap-3 rounded-xl border p-4 text-left transition ${decision === "still_not_solved"
               ? "border-red-400 bg-red-50 ring-1 ring-red-400"
               : "border-gray-200 hover:border-red-300 hover:bg-red-50/50"
-          }`}
+            }`}
         >
           <MessageSquareWarning className="mt-0.5 h-5 w-5 shrink-0 text-red-600" />
           <span>

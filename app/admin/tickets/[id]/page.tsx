@@ -1,7 +1,6 @@
 
 import { Suspense } from "react";
 import TicketDetailsClient from "./TicketDetailsClient";
-
 type PageProps = {
   params: Promise<{ id: string }>;
 };
