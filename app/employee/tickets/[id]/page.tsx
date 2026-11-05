@@ -3,6 +3,7 @@
 
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import EmployeeTicketAttachments from "@/components/employee-ticket-attachments";
 import {
   ArrowLeft,
   AlertCircle,
@@ -205,8 +206,8 @@ function ProgressTimeline({ ticket }: { ticket: EmployeeTicket }) {
 
               <div
                 className={`relative z-[1] flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full border ${step.complete
-                  ? "border-green-200 bg-green-50 text-green-600"
-                  : "border-gray-300 bg-white text-gray-400"
+                    ? "border-green-200 bg-green-50 text-green-600"
+                    : "border-gray-300 bg-white text-gray-400"
                   }`}
               >
                 {step.complete ? (
@@ -569,6 +570,13 @@ function EmployeeTicketDetailsContent() {
             <TicketConversation
               ticketId={ticket.id}
               ticketStatus={ticket.status}
+            />
+
+            {/* Additional attachments for New / In Progress tickets */}
+            <EmployeeTicketAttachments
+              ticketId={ticket.id}
+              ticketStatus={ticket.status}
+              onUploaded={() => void loadTicket()}
             />
 
             {/* Employee completion confirmation or rejection */}
