@@ -205,8 +205,8 @@ function ProgressTimeline({ ticket }: { ticket: EmployeeTicket }) {
 
               <div
                 className={`relative z-[1] flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full border ${step.complete
-                    ? "border-green-200 bg-green-50 text-green-600"
-                    : "border-gray-300 bg-white text-gray-400"
+                  ? "border-green-200 bg-green-50 text-green-600"
+                  : "border-gray-300 bg-white text-gray-400"
                   }`}
               >
                 {step.complete ? (
