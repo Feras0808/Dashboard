@@ -1,9 +1,17 @@
 
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import {
+  AlertCircle,
+  CheckCircle2,
+  Loader2,
+  RefreshCw,
+  Users,
+} from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import AdminResetEmployeePassword from "@/components/admin-reset-employee-password";
 
 type Company = {
   id: string;
@@ -15,9 +23,18 @@ type Department = {
   name: string;
 };
 
+type Employee = {
+  id: string;
+  full_name: string;
+  email: string;
+  company_id: string | null;
+  department_id: string | null;
+};
+
 export default function ManageEmployeesPage() {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
 
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -27,12 +44,69 @@ export default function ManageEmployeesPage() {
 
   const [loadingCompanies, setLoadingCompanies] = useState(true);
   const [loadingDepartments, setLoadingDepartments] = useState(true);
+  const [loadingEmployees, setLoadingEmployees] = useState(true);
+  const [refreshingEmployees, setRefreshingEmployees] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   const [companyError, setCompanyError] = useState("");
   const [departmentError, setDepartmentError] = useState("");
+  const [employeeError, setEmployeeError] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+
+  const loadEmployees = useCallback(async (refresh = false) => {
+    if (refresh) {
+      setRefreshingEmployees(true);
+    } else {
+      setLoadingEmployees(true);
+    }
+
+    setEmployeeError("");
+
+    try {
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser();
+
+      if (authError || !user) {
+        throw new Error("Your session has expired. Please sign in again.");
+      }
+
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (profileError || profile?.role !== "admin") {
+        throw new Error("You are not authorized to view employees.");
+      }
+
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, full_name, company_id, department_id")
+        .eq("role", "employee")
+        .order("full_name", { ascending: true });
+
+      if (error) {
+        throw new Error(`Could not load employees: ${error.message}`);
+      }
+
+      setEmployees((data ?? []) as Employee[]);
+    } catch (error) {
+      console.error("Employee loading failed:", error);
+
+      setEmployeeError(
+        error instanceof Error
+          ? error.message
+          : "Could not load employees."
+      );
+    } finally {
+      setLoadingEmployees(false);
+      setRefreshingEmployees(false);
+    }
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -81,11 +155,12 @@ export default function ManageEmployeesPage() {
 
     void loadCompanies();
     void loadDepartments();
+    void loadEmployees();
 
     return () => {
       active = false;
     };
-  }, []);
+  }, [loadEmployees]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -162,6 +237,8 @@ export default function ManageEmployeesPage() {
       setCompanyId("");
       setDepartmentId("");
       setPassword("");
+
+      await loadEmployees(true);
     } catch (error) {
       console.error("Employee creation failed:", error);
 
@@ -178,9 +255,17 @@ export default function ManageEmployeesPage() {
   const fieldClass =
     "mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-gray-100";
 
+  function getCompanyName(id: string | null) {
+    return companies.find((company) => company.id === id)?.name ?? "—";
+  }
+
+  function getDepartmentName(id: string | null) {
+    return departments.find((department) => department.id === id)?.name ?? "—";
+  }
+
   return (
     <main className="min-h-screen bg-gray-50 px-4 py-8 text-gray-900 sm:px-6">
-      <div className="mx-auto max-w-4xl">
+      <div className="mx-auto max-w-5xl">
         <Link
           href="/admin"
           className="text-sm font-medium text-blue-700 hover:underline"
@@ -193,11 +278,12 @@ export default function ManageEmployeesPage() {
             Manage Employees
           </h1>
           <p className="mt-2 text-sm text-gray-600">
-            Create employee accounts, assign company and department, and set
-            temporary passwords.
+            Create employee accounts, assign company and department, manage
+            existing employees, and reset passwords.
           </p>
         </div>
 
+        {/* ADD EMPLOYEE */}
         <section className="mt-6 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm sm:p-7">
           <h2 className="text-lg font-semibold">Add New Employee</h2>
           <p className="mt-1 text-sm text-gray-500">
@@ -223,7 +309,10 @@ export default function ManageEmployeesPage() {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="mt-6 grid gap-5 sm:grid-cols-2">
+          <form
+            onSubmit={handleSubmit}
+            className="mt-6 grid gap-5 sm:grid-cols-2"
+          >
             <label className="block text-sm font-medium">
               Full name
               <input
@@ -363,6 +452,115 @@ export default function ManageEmployeesPage() {
               </button>
             </div>
           </form>
+        </section>
+
+        {/* EXISTING EMPLOYEES */}
+        <section className="mt-8 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 p-5 sm:p-6">
+            <div>
+              <div className="flex items-center gap-2">
+                <Users className="h-5 w-5 text-gray-700" />
+                <h2 className="text-lg font-semibold">
+                  Existing Employees
+                </h2>
+              </div>
+
+              <p className="mt-1 text-sm text-gray-500">
+                {employees.length} employee
+                {employees.length !== 1 ? "s" : ""} registered
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => void loadEmployees(true)}
+              disabled={refreshingEmployees || loadingEmployees}
+              className="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2.5 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 disabled:opacity-50"
+            >
+              <RefreshCw
+                className={`h-4 w-4 ${refreshingEmployees ? "animate-spin" : ""
+                  }`}
+              />
+              Refresh
+            </button>
+          </div>
+
+          {employeeError && (
+            <div className="m-5 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+              <div>
+                <p className="font-semibold">Could not load employees</p>
+                <p className="mt-1">{employeeError}</p>
+              </div>
+            </div>
+          )}
+
+          {loadingEmployees ? (
+            <div className="flex min-h-40 items-center justify-center gap-3 text-sm text-gray-500">
+              <Loader2 className="h-5 w-5 animate-spin" />
+              Loading employees...
+            </div>
+          ) : employees.length === 0 && !employeeError ? (
+            <div className="flex min-h-40 flex-col items-center justify-center px-5 text-center">
+              <Users className="h-8 w-8 text-gray-300" />
+              <p className="mt-3 font-semibold text-gray-800">
+                No employees found
+              </p>
+              <p className="mt-1 text-sm text-gray-500">
+                Employees you create will appear here.
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[850px]">
+                <thead>
+                  <tr className="border-b bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
+                    <th className="px-5 py-4 font-medium">Employee</th>
+                    <th className="px-5 py-4 font-medium">Company</th>
+                    <th className="px-5 py-4 font-medium">Department</th>
+                    <th className="px-5 py-4 text-right font-medium">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+
+                <tbody className="divide-y divide-gray-100">
+                  {employees.map((employee) => (
+                    <tr
+                      key={employee.id}
+                      className="transition hover:bg-gray-50"
+                    >
+                      <td className="px-5 py-4">
+                        <p className="font-semibold text-gray-900">
+                          {employee.full_name || "Unnamed employee"}
+                        </p>
+                        <p className="mt-1 text-sm text-gray-500">
+                          {employee.email}
+                        </p>
+                      </td>
+
+                      <td className="px-5 py-4 text-sm text-gray-600">
+                        {getCompanyName(employee.company_id)}
+                      </td>
+
+                      <td className="px-5 py-4 text-sm text-gray-600">
+                        {getDepartmentName(employee.department_id)}
+                      </td>
+
+                      <td className="px-5 py-4 text-right">
+                        <AdminResetEmployeePassword
+                          employeeId={employee.id}
+                          employeeName={
+                            employee.full_name || employee.email
+                          }
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </section>
       </div>
     </main>
