@@ -3,71 +3,158 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
+async function verifyAdmin(request: NextRequest) {
+  const token = request.headers
+    .get("authorization")
+    ?.match(/^Bearer\s+(.+)$/i)?.[1];
+
+  if (!token) {
+    return {
+      error: NextResponse.json(
+        { error: "Please sign in as an administrator." },
+        { status: 401 }
+      ),
+      admin: null,
+    };
+  }
+
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!url || !anonKey) {
+    throw new Error("Supabase URL or anon key is missing.");
+  }
+
+  const verifier = createClient(url, anonKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  });
+
+  const {
+    data: { user },
+    error: authError,
+  } = await verifier.auth.getUser(token);
+
+  if (authError || !user) {
+    return {
+      error: NextResponse.json(
+        { error: "Your session is invalid. Please sign in again." },
+        { status: 401 }
+      ),
+      admin: null,
+    };
+  }
+
+  const admin = getSupabaseAdmin();
+
+  const { data: adminProfile, error: adminProfileError } = await admin
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  if (adminProfileError) {
+    throw new Error(
+      `Unable to verify administrator role: ${adminProfileError.message}`
+    );
+  }
+
+  if (adminProfile?.role !== "admin") {
+    return {
+      error: NextResponse.json(
+        { error: "Administrator access is required." },
+        { status: 403 }
+      ),
+      admin: null,
+    };
+  }
+
+  return { error: null, admin };
+}
+
+// GET: List existing employees, including emails from Supabase Auth.
+export async function GET(request: NextRequest) {
+  try {
+    const { error: authorizationError, admin } =
+      await verifyAdmin(request);
+
+    if (authorizationError || !admin) {
+      return authorizationError!;
+    }
+
+    const { data: profiles, error: profilesError } = await admin
+      .from("profiles")
+      .select("id, full_name, company_id, department_id")
+      .eq("role", "employee")
+      .order("full_name", { ascending: true });
+
+    if (profilesError) {
+      throw new Error(
+        `Could not load employee profiles: ${profilesError.message}`
+      );
+    }
+
+    const employees = await Promise.all(
+      (profiles ?? []).map(async (profile) => {
+        const {
+          data: { user: authUser },
+          error: authUserError,
+        } = await admin.auth.admin.getUserById(profile.id);
+
+        if (authUserError) {
+          console.error(
+            `Could not retrieve Auth account ${profile.id}:`,
+            authUserError.message
+          );
+        }
+
+        return {
+          id: profile.id,
+          full_name: profile.full_name,
+          email: authUser?.email ?? "",
+          company_id: profile.company_id,
+          department_id: profile.department_id,
+        };
+      })
+    );
+
+    return NextResponse.json(
+      { employees },
+      {
+        headers: {
+          "Cache-Control": "no-store",
+        },
+      }
+    );
+  } catch (error) {
+    console.error("Employee list API failed:", error);
+
+    return NextResponse.json(
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : "Could not load employees.",
+      },
+      { status: 500 }
+    );
+  }
+}
+
+// POST: Create a new employee.
 export async function POST(request: NextRequest) {
   let createdUserId: string | null = null;
 
   try {
-    // 1. Verify the signed-in user.
-    const token = request.headers
-      .get("authorization")
-      ?.match(/^Bearer\s+(.+)$/i)?.[1];
+    const { error: authorizationError, admin } =
+      await verifyAdmin(request);
 
-    if (!token) {
-      return NextResponse.json(
-        { error: "Please sign in as an administrator." },
-        { status: 401 }
-      );
+    if (authorizationError || !admin) {
+      return authorizationError!;
     }
 
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-    if (!url || !anonKey) {
-      throw new Error("Supabase URL or anon key is missing from environment variables.");
-    }
-
-    const verifier = createClient(url, anonKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    });
-
-    const {
-      data: { user },
-      error: authError,
-    } = await verifier.auth.getUser(token);
-
-    if (authError || !user) {
-      return NextResponse.json(
-        { error: "Your session is invalid. Please sign in again." },
-        { status: 401 }
-      );
-    }
-
-    // 2. Use the server-only admin client.
-    const admin = getSupabaseAdmin();
-
-    // 3. Only administrators can create employees.
-    const { data: adminProfile, error: adminProfileError } = await admin
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .maybeSingle();
-
-    if (adminProfileError) {
-      console.error("Admin profile lookup failed:", adminProfileError);
-      throw new Error(`Unable to verify administrator role: ${adminProfileError.message}`);
-    }
-
-    if (adminProfile?.role !== "admin") {
-      return NextResponse.json(
-        { error: "Administrator access is required." },
-        { status: 403 }
-      );
-    }
-
-    // 4. Validate the request.
     const body = await request.json();
 
     const fullName =
@@ -115,7 +202,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 5. Verify that the selected company exists.
     const { data: company, error: companyError } = await admin
       .from("companies")
       .select("id")
@@ -133,8 +219,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 6. Verify the department using the columns that actually exist.
-    // Your departments table does not have a company_id column.
     const { data: department, error: departmentError } = await admin
       .from("departments")
       .select("id")
@@ -142,7 +226,9 @@ export async function POST(request: NextRequest) {
       .maybeSingle();
 
     if (departmentError) {
-      throw new Error(`Department lookup failed: ${departmentError.message}`);
+      throw new Error(
+        `Department lookup failed: ${departmentError.message}`
+      );
     }
 
     if (!department) {
@@ -152,7 +238,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 7. Create the employee's Supabase Auth account.
     const {
       data: { user: newUser },
       error: createError,
@@ -194,8 +279,6 @@ export async function POST(request: NextRequest) {
 
     createdUserId = newUser.id;
 
-    // 8. Create the linked profile using the same UUID.
-    // If your profiles table lacks must_change_password, see the SQL note below.
     const { error: profileError } = await admin
       .from("profiles")
       .upsert(
@@ -211,10 +294,11 @@ export async function POST(request: NextRequest) {
       );
 
     if (profileError) {
-      throw new Error(`Profile creation failed: ${profileError.message}`);
+      throw new Error(
+        `Profile creation failed: ${profileError.message}`
+      );
     }
 
-    // 9. Return success.
     createdUserId = null;
 
     return NextResponse.json(
@@ -231,7 +315,6 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("Employee creation failed:", error);
 
-    // Remove the Auth user if profile creation failed.
     if (createdUserId) {
       try {
         const admin = getSupabaseAdmin();
@@ -240,8 +323,8 @@ export async function POST(request: NextRequest) {
 
         if (deleteError) {
           console.error(
-            "Failed to clean up the newly created Auth user:",
-            deleteError
+            "Failed to clean up newly created Auth user:",
+            deleteError.message
           );
         }
       } catch (cleanupError) {
@@ -249,13 +332,13 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const message =
-      error instanceof Error
-        ? error.message
-        : "An unexpected server error occurred.";
-
     return NextResponse.json(
-      { error: message },
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : "An unexpected server error occurred.",
+      },
       { status: 500 }
     );
   }

@@ -5,7 +5,6 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
   AlertCircle,
-  CheckCircle2,
   Loader2,
   RefreshCw,
   Users,
@@ -25,7 +24,7 @@ type Department = {
 
 type Employee = {
   id: string;
-  full_name: string;
+  full_name: string | null;
   email: string;
   company_id: string | null;
   department_id: string | null;
@@ -54,6 +53,7 @@ export default function ManageEmployeesPage() {
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
+  // Load existing employees from the secure server API.
   const loadEmployees = useCallback(async (refresh = false) => {
     if (refresh) {
       setRefreshingEmployees(true);
@@ -65,35 +65,33 @@ export default function ManageEmployeesPage() {
 
     try {
       const {
-        data: { user },
-        error: authError,
-      } = await supabase.auth.getUser();
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
 
-      if (authError || !user) {
-        throw new Error("Your session has expired. Please sign in again.");
+      if (sessionError || !session?.access_token) {
+        throw new Error(
+          "Your session has expired. Please sign in again."
+        );
       }
 
-      const { data: profile, error: profileError } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", user.id)
-        .maybeSingle();
+      const response = await fetch("/api/admin/employees", {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        cache: "no-store",
+      });
 
-      if (profileError || profile?.role !== "admin") {
-        throw new Error("You are not authorized to view employees.");
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          result.error || "Could not load employees."
+        );
       }
 
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("id, full_name, company_id, department_id")
-        .eq("role", "employee")
-        .order("full_name", { ascending: true });
-
-      if (error) {
-        throw new Error(`Could not load employees: ${error.message}`);
-      }
-
-      setEmployees((data ?? []) as Employee[]);
+      setEmployees(result.employees ?? []);
     } catch (error) {
       console.error("Employee loading failed:", error);
 
@@ -108,6 +106,7 @@ export default function ManageEmployeesPage() {
     }
   }, []);
 
+  // Load companies, departments and employees.
   useEffect(() => {
     let active = true;
 
@@ -162,6 +161,7 @@ export default function ManageEmployeesPage() {
     };
   }, [loadEmployees]);
 
+  // Create a new employee.
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -204,7 +204,9 @@ export default function ManageEmployeesPage() {
       if (sessionError) throw sessionError;
 
       if (!session?.access_token) {
-        throw new Error("Your session has expired. Please sign in again.");
+        throw new Error(
+          "Your session has expired. Please sign in again."
+        );
       }
 
       const response = await fetch("/api/admin/employees", {
@@ -225,7 +227,9 @@ export default function ManageEmployeesPage() {
       const result = await response.json();
 
       if (!response.ok) {
-        throw new Error(result.error || "Unable to create the employee.");
+        throw new Error(
+          result.error || "Unable to create the employee."
+        );
       }
 
       setSuccessMessage(
@@ -260,7 +264,9 @@ export default function ManageEmployeesPage() {
   }
 
   function getDepartmentName(id: string | null) {
-    return departments.find((department) => department.id === id)?.name ?? "—";
+    return (
+      departments.find((department) => department.id === id)?.name ?? "—"
+    );
   }
 
   return (
@@ -283,12 +289,13 @@ export default function ManageEmployeesPage() {
           </p>
         </div>
 
-        {/* ADD EMPLOYEE */}
+        {/* ADD NEW EMPLOYEE */}
         <section className="mt-6 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm sm:p-7">
           <h2 className="text-lg font-semibold">Add New Employee</h2>
+
           <p className="mt-1 text-sm text-gray-500">
-            Employees must change their temporary password before accessing the
-            IT support dashboard.
+            Employees must change their temporary password before accessing
+            the IT support dashboard.
           </p>
 
           {errorMessage && (
@@ -489,7 +496,9 @@ export default function ManageEmployeesPage() {
             <div className="m-5 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800">
               <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
               <div>
-                <p className="font-semibold">Could not load employees</p>
+                <p className="font-semibold">
+                  Could not load employees
+                </p>
                 <p className="mt-1">{employeeError}</p>
               </div>
             </div>
@@ -535,7 +544,7 @@ export default function ManageEmployeesPage() {
                           {employee.full_name || "Unnamed employee"}
                         </p>
                         <p className="mt-1 text-sm text-gray-500">
-                          {employee.email}
+                          {employee.email || "Email unavailable"}
                         </p>
                       </td>
 
@@ -551,7 +560,7 @@ export default function ManageEmployeesPage() {
                         <AdminResetEmployeePassword
                           employeeId={employee.id}
                           employeeName={
-                            employee.full_name || employee.email
+                            employee.full_name || employee.email || "Employee"
                           }
                         />
                       </td>
